@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android 小工具</title>
+    <link rel="stylesheet" href="/static/css/select2.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+<body class="bg-light">
+    <style>
+        .card {
+            margin-top: 50px;
+        }
+        .result {
+            font-weight: bold;
+            margin-top: 50px;
+        }
+        .custom-select {
+            width: 400px; /* 设置设备列表的下拉框宽度 */
+        }
+        .btn-success {
+            width: 130px; /* 调整绿色按钮的宽度 */
+        }
+        /* 实际没用到 */
+        #deviceList {
+            margin-left: 60; /* 添加一个左边间距*/
+        }
+        /* 实际没用到 */
+        .custom-btn-group .btn-primary {
+            width: calc(25% - 50px); /* 计算按钮宽度，平分整个的宽度*/
+            height: auto; /* 设置按钮高度为自动 */
+            border-radius: 5px; /* 设置蓝色按钮的圆角 */
+        }
+        .btn-group {
+            justify-content: center; /* 居中展示 */
+            margin-bottom: 20px;  /* 设置选择文件的上下间距，避免右侧绿色按钮展示重叠*/      
+        }
+        /* 设置选择文件 */
+        #apkFile, #pyFile {
+            width: calc(40%); /* 设置文件选择框占整个宽度的比例 */
+            margin-right: 330px; /* 设置文件选择框和右侧按钮的间距 */
+        }
+        /* 单独设置安装和运行按钮的圆角 */
+        #installApk, #runScript {
+            width: 40px; /* 设置按钮宽度 */
+            height: 40px; /* 设置按钮高度 */
+            border-radius: 5px; /* 设置按钮圆角 */
+        }
+        .chart-container {
+            max-width: 800px;/* 设置图表宽度 */
+        }
+        #startPerformanceTest {
+            width: 200px; /* 调整开始按钮的宽度 */
+        }
+        #stopPerformanceTest {
+            width: 200px; /* 调整结束按钮的宽度 */
+        }
+        #stopPerformanceTest {
+            margin-left: 300px; /* 调整开始和结束按钮的间距 */
+        }
+    </style>
+</head>
+<div class="container">
+     <div class="card mx-auto" style="max-width: 800px;">
+         <div class="card-body">
+            <h1 class="text-center mb-4">Android 小工具</h1>
+            <div class="input-group-append d-flex justify-content-between">
+                <button class="btn btn-success" onclick="getDevices()">刷新设备列表</button>
+                <select id="deviceList" class="form-control custom-select"></select>
+            </div>
+            <br>
+            <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
+                <button class="btn btn-primary" onclick="restartApp() "style="width: 130px;">重启应用</button>
+                <button class="btn btn-primary" onclick="clearData() "style="width: 130px;">清除数据重启</button>
+                <button class="btn btn-primary" onclick="captureScreen() "style="width: 130px;">截取手机屏幕</button>
+                <button class="btn btn-danger" id="uninstallApp" onclick="uninstallApp() "style="width: 130px;">卸载应用</button>
+            </div>
+
+            <div class="btn-group d-flex justify-content-between">
+                <input type="file" name="file" id="apkFile" accept=".apk" class="form-control-file">
+                <button class="btn btn-success" id="installApk" onclick="installApk()">安装APK</button>
+            </div>
+
+            <div class="btn-group d-flex justify-content-between">
+                <input type="file" name="file" id="pyFile" accept=".py" class="form-control-file">
+                <button class="btn btn-success" id="runScript" onclick="runScript()">运行Py文件</button>
+            </div>
+
+            <div class="result" id="result"></div>
+        </div>
+    </div>
+        
+    <div class="card mt-5 mx-auto chart-container" style="max-width: 800px;">
+        <div class="card-body">
+            <div class="text-center">
+                <h1 class="card-title">性能监控工具</h1>
+            </div>
+
+            <div class="form-group">
+                <label for="packageNameSelect">选择包名：</label>
+                <div class="input-group" style="max-width: 500px;">
+                    <select id="packageNameSelect" class="form-control custom-select" autocomplete="off"></select>
+                    <div class="input-group-append" style="margin-top:  -5px; margin-left: 20px;">
+                        <button id="refreshPackageName" class="btn btn-success">刷新包名</button>
+                    </div>
+                </div>
+            </div>
+            <br>
+
+            <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
+                <button class="btn btn-primary" id="startPerformanceTest">开始性能测试</button>
+                
+                <button class="btn btn-danger" id="stopPerformanceTest">结束性能测试</button>
+            </div>
+
+            <div class="chart-container" style="position: relative; height:60vh; width:100%;">
+                <canvas id="memoryChart"></canvas>
+            </div>
+
+            <div class="chart-container" style="position: relative; height:60vh; width:100%;">
+                <canvas id="cpuChart"></canvas>
+            </div>
+            <div class="chart-container" style="position: relative; height:60vh; width:100%;">
+                <canvas id="frameRateChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/jquery-3.3.1.min.js"></script>
+<script src="/static/js/select2.min.js"></script>
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/bootstrap.min.js"></script>
+<script src="/static/js/chart.js"></script>
+
+<script>
+// JavaScript 
+// 初始化Select2
+$('#packageNameSelect').select2({
+    ajax: {
+        url: '/search_packages',
+        dataType: 'json',
+        delay: 250,
+        data: function (params) {
+            params.term = params.term || 'com'; // 如果term未定义，则设置为'com'
+            return {
+                query: params.term,
+                device: $('#deviceList').val()
+            };
+        },
+        processResults: function (data) {
+            return {
+                results: data.matches.map(app => ({ id: app, text: app }))
+            };
+        },
+        cache: true
+    }
+});
+
+// 获取设备列表
+function getDevices(callback) {
+    const deviceList = document.getElementById('deviceList');
+    deviceList.innerHTML = '';
+    fetch('/get_devices')
+        .then(response => response.json())
+        .then(data => {
+            data.devices.forEach(device => {
+                const option = new Option(device, device);
+                deviceList.add(option);
+            });
+            if (callback) {
+                callback(); // 在设备列表加载完毕后执行回调函数
+            }
+        })
+        .catch(error => {
+            alert('获取设备列表失败，请检查连接和ADB配置');
+            console.error('Error:', error);
+        });
+}
+
+// 重启应用
+function restartApp() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    fetch(`/restart_app?device=${selectedDevice}`)
+        .then(response => response.json())
+        .then(data => {
+            const packageName = data.package_name || '';
+            displayResult('已重启应用', true, packageName);
+        })
+        .catch(error => {
+            displayResult('重启应用失败，请检查连接和ADB配置', false);
+            console.error('Error:', error);
+        });
+}
+
+// 清除数据重启
+function clearData() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    fetch(`/clear_data?device=${selectedDevice}`)
+        .then(response => response.json())
+        .then(data => {
+            const packageName = data.package_name || '';
+            displayResult('已清除数据，应用已重启', true, packageName);
+        })
+        .catch(error => {
+            displayResult('清除数据失败，请检查连接和ADB配置', false);
+            console.error('Error:', error);
+        });
+}
+
+// 卸载App
+function uninstallApp() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    const selectedPackageName = document.getElementById('packageNameSelect').value;
+
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    if (!selectedPackageName) {
+        alert('请先选择应用包名');
+        return;
+    }
+
+    // 弹出确认框
+    if (confirm('确认要卸载应用吗？')) {
+        // 用户点击了确认
+        fetch(`/uninstall_apk?device=${selectedDevice}`, {
+            method: 'POST',
+        })
+            .then(response => response.json())
+            .then(data => {
+                displayResult(data.message, true);
+                getInstalledApps();  // 刷新应用列表
+            })
+            .catch(error => {
+                displayResult('卸载应用失败，请检查连接和ADB配置', false);
+                console.error('Error:', error);
+            });
+    } else {
+        // 用户点击了取消
+        return;
+    }
+}
+
+// 截取手机屏幕
+function captureScreen() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+    fetch(`/capture_screen?device=${selectedDevice}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.text();
+        })
+        .then(filePath => {
+            const screenshotWindow = window.open(filePath, '_blank');
+            if (!screenshotWindow) {
+                alert('请允许弹出窗口以查看截图');
+            }
+        })
+        .catch(error => {
+            displayResult('截取设备屏幕失败，请检查连接和ADB配置', false);
+            console.error('Error:', error);
+        });
+}
+
+// 安装APK
+function installApk() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    const apkFile = document.getElementById('apkFile').files[0];
+    if (!apkFile) {
+        alert('请先选择要安装的APK文件');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', apkFile);
+
+    fetch(`/install_apk?device=${selectedDevice}`, {
+        method: 'POST',
+        body: formData,
+    })
+        .then(response => response.json())
+        .then(data => {
+            const packageName = data.package_name || '';
+            displayResult(data.message, true, packageName);
+        })
+        .catch(error => {
+            displayResult('安装APK失败，请检查连接和ADB配置', false);
+            console.error('Error:', error);
+        });
+}
+
+// 运行Python脚本
+function runScript() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    const pyFile = document.getElementById('pyFile').files[0];
+    if (!pyFile) {
+        alert('请先选择要运行的Python文件');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', pyFile);
+
+    fetch(`/run_script?device=${selectedDevice}`, {
+        method: 'POST',
+        body: formData,
+    })
+        .then(response => response.json())
+        .then(data => {
+            const output = data.output || '';
+            displayResult(data.message + '\n' + output, true);
+        })
+        .catch(error => {
+            displayResult('运行Python脚本失败，请检查连接和ADB配置', false);
+            console.error('Error:', error);
+        });
+}
+
+
+let selectedPackageName = '';  // 设置查询包名为全局变量
+
+// 显示结果
+function displayResult(message, isSuccess, packageName) {
+    const resultDiv = document.getElementById('result');
+    resultDiv.innerHTML = message;
+    resultDiv.style.color = isSuccess ? 'green' : 'red';
+    if (packageName) {
+        resultDiv.innerHTML += `<br>应用包名: ${packageName}`;
+    }
+}
+
+// 获取已安装应用列表
+function getInstalledApps() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    const packageNameSelect = document.getElementById('packageNameSelect');
+    packageNameSelect.innerHTML = '';
+
+    fetch(`/get_app_list?device=${selectedDevice}`)
+        .then(response => response.json())
+        .then(data => {
+            data.apps.forEach(packageName => {
+                const option = new Option(packageName, packageName);
+                packageNameSelect.add(option);
+            });
+            selectedPackageName = packageNameSelect.value;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+// 内存图表
+let memoryData = [];  // 存储内存数据
+let performanceTestInterval;  // 用于保存监控间隔
+let memoryChart = new Chart(document.getElementById('memoryChart').getContext('2d'), {
+    type: 'line',
+    data: {
+        datasets: [{
+            label: '内存使用量 (MB)',
+            data: memoryData,
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            x: {
+                type: 'category',
+                labels: memoryData.map(entry => entry.x),
+                position: 'bottom',
+                maxTicks: 5 // 设置最大刻度数量为 5
+            },
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: '内存 (MB)'
+                }
+            }
+        }
+    }
+});
+
+// CPU图表
+let cpuData = [];  // 存储CPU使用率数据
+let cpuMonitorInterval;  // 用于保存监控间隔
+let cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), {
+    type: 'line',
+    data: {
+        datasets: [{
+            label: 'CPU 使用率 (%)',
+            data: cpuData,
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            x: {
+                type: 'category',
+                labels: cpuData.map(entry => entry.x),
+                position: 'bottom',
+                maxTicks: 5
+            },
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'CPU 使用率 (%)'
+                }
+            }
+        }
+    }
+});
+
+// 帧率图表
+let frameRateData = []; // 存储帧率数据
+let frameRateMonitorInterval;  // 用于保存监控间隔
+let frameRateChart = new Chart(document.getElementById('frameRateChart').getContext('2d'), {
+    type: 'line',
+    data: {
+        datasets: [{
+            label: '帧率 (fps)',
+            data: frameRateData,
+            backgroundColor: 'rgba(0, 0, 255, 0.2)', // 设置背景色为蓝色
+            borderColor: 'rgba(0, 0, 255, 1)', // 设置边框颜色为蓝色
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            x: {
+                type: 'category',
+                position: 'bottom',
+                maxTicks: 5
+            },
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: '帧率 (fps)'
+                }
+            }
+        }
+    }
+});
+
+// 开始性能测试
+function startPerformanceTest() {
+    stopPerformanceTest();
+    const selectedDevice = document.getElementById('deviceList').value;
+    selectedPackageName = document.getElementById('packageNameSelect').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    // 清除之前性能数据
+    memoryData = [];
+    cpuData = [];
+    frameRateData = [];
+
+    // 清空之前的图表
+    memoryChart.destroy();
+    cpuChart.destroy();
+    frameRateChart.destroy();
+
+    // 重新创建一个新的内存图表
+    memoryChart = new Chart(document.getElementById('memoryChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: '内存使用量 (MB)',
+                data: memoryData,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                x: {
+                    type: 'category',
+                    position: 'bottom',
+                    maxTicks: 5
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: '内存 (MB)'
+                    }
+                }
+            }
+        }
+    });
+
+    // 重新创建一个新的 CPU 图表
+    cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: 'CPU 使用率 (%)',
+                data: cpuData,
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                x: {
+                    type: 'category',
+                    position: 'bottom',
+                    maxTicks: 5
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'CPU 使用率 (%)'
+                    }
+                }
+            }
+        }
+    });
+
+    // 重新创建一个新的帧率图表
+    frameRateChart = new Chart(document.getElementById('frameRateChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: '帧率 (fps)',
+                data: frameRateData,
+                backgroundColor: 'rgba(0, 0, 255, 0.2)',
+                borderColor: 'rgba(0, 0, 255, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                x: {
+                    type: 'category',
+                    position: 'bottom',
+                    maxTicks: 5
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: '帧率 (fps)'
+                    }
+                }
+            }
+        }
+    });
+
+    // 启动定时任务，每隔1.5秒获取一次内存和 CPU 数据
+    performanceTestInterval = setInterval(function () {
+        getMemoryUsage();
+        getCPUUsage();
+        getFrameRate();
+    }, 2000); //修改获取间隔
+
+    // 更新图表绘制数据
+    memoryChart.update();
+    cpuChart.update();
+    frameRateChart.update();
+}
+
+// 获取内存数据
+function getMemoryUsage() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    const currentTime = new Date();
+    const formattedTime = currentTime.toLocaleTimeString();
+    // 使用全局变量 selectedPackageName 作为包名
+    const package_name = selectedPackageName;
+
+    if (!package_name) {
+        alert('请先选择应用包名');
+        return;
+    }
+
+    fetch(`/get_memory_usage?device=${selectedDevice}&package=${package_name}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const memoryUsage = data.memory_usage || 0;
+
+            memoryData.push({x: formattedTime, y: memoryUsage});
+
+            // 更新 x 轴标签
+            memoryChart.data.labels.push(formattedTime);
+
+            memoryChart.data.datasets[0].data = memoryData;
+            memoryChart.update();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+// 获取CPU数据
+function getCPUUsage() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+    const currentTime = new Date();
+    const formattedTime = currentTime.toLocaleTimeString();
+    // 使用全局变量 selectedPackageName 作为包名
+    const package_name = selectedPackageName;
+
+    if (!package_name) {
+        alert('请先选择应用包名');
+        return;
+    }
+
+    fetch(`/get_cpu_usage?device=${selectedDevice}&package=${package_name}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const cpuUsage = data.cpu_usage || 0;
+
+            cpuData.push({x: formattedTime, y: cpuUsage});
+
+            // 更新 x 轴标签
+            cpuChart.data.labels.push(formattedTime);
+
+            cpuChart.data.datasets[0].data = cpuData;
+            cpuChart.update();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+// 获取帧率数据
+function getFrameRate() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+    const currentTime = new Date();
+    const formattedTime = currentTime.toLocaleTimeString();
+
+    fetch(`/get_frame_rate?device=${selectedDevice}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const frameRate = data.frame_rate || 0;
+
+            frameRateData.push({x: formattedTime, y: frameRate});
+
+            // 更新 x 轴标签
+            frameRateChart.data.labels.push(formattedTime);
+
+            frameRateChart.data.datasets[0].data = frameRateData;
+            frameRateChart.update();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+function stopPerformanceTest() {
+    // 停止定时获取性能数据
+    clearInterval(performanceTestInterval);
+    clearInterval(cpuMonitorInterval);
+    clearInterval(frameRateMonitorInterval);
+}
+
+// 点击开始性能测试时启动性能监控
+document.getElementById('startPerformanceTest').addEventListener('click', function() {
+    startPerformanceTest();
+});
+// 点击结束性能测试时停止性能监控
+document.getElementById('stopPerformanceTest').addEventListener('click', function() {
+    stopPerformanceTest();
+});
+
+// 点击刷新包名时获取最新包名列表
+document.getElementById('refreshPackageName').addEventListener('click', function() {
+    getInstalledApps();
+});
+
+// 获取设备列表和已安装应用列表
+function getDevicesAndApps() {
+    getDevices(getInstalledApps);
+}
+
+// 初始化时获取设备列表和包名列表
+document.addEventListener('DOMContentLoaded', function() {
+    getDevicesAndApps();
+    selectedPackageName = document.getElementById('packageNameSelect').value;
+});
+</script>
+</body>
+</html>
