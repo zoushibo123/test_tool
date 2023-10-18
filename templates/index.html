@@ -589,13 +589,13 @@ function startPerformanceTest() {
     performanceTestInterval = setInterval(function () {
         getMemoryUsage();
         getCPUUsage();
-        getFrameRate();
+        // getFrameRate();   屏蔽获取帧率
     }, 2000); //修改获取间隔
 
     // 更新图表绘制数据
     memoryChart.update();
     cpuChart.update();
-    frameRateChart.update();
+    // frameRateChart.update(); 屏蔽更新帧率图表
 }
 
 // 获取内存数据
