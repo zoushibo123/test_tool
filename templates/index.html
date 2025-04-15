@@ -41,7 +41,7 @@
             margin-right: 330px; /* 设置文件选择框和右侧按钮的间距 */
         }
         /* 单独设置安装和运行按钮的圆角 */
-        #installApk, #runScript {
+        #installApk, #runScript, #openHTML{
             width: 40px; /* 设置按钮宽度 */
             height: 40px; /* 设置按钮高度 */
             border-radius: 5px; /* 设置按钮圆角 */
@@ -70,9 +70,9 @@
             </div>
             <br>
             <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
-                <button class="btn btn-primary" onclick="restartApp() "style="width: 130px;">重启应用</button>
-                <button class="btn btn-primary" onclick="clearData() "style="width: 130px;">清除数据重启</button>
-                <button class="btn btn-primary" onclick="captureScreen() "style="width: 130px;">截取手机屏幕</button>
+                <button class="btn btn-primary" onclick="restartApp() "style="width: 130px;">杀端重启</button>
+                <button class="btn btn-danger" onclick="clearData() "style="width: 130px;">清除数据</button>
+                <button class="btn btn-primary" onclick="captureScreen() "style="width: 130px;">截取屏幕</button>
                 <button class="btn btn-danger" id="uninstallApp" onclick="uninstallApp() "style="width: 130px;">卸载应用</button>
             </div>
 
@@ -86,14 +86,26 @@
                 <button class="btn btn-success" id="runScript" onclick="runScript()">运行Py文件</button>
             </div>
 
+            <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
+                <button class="btn btn-primary" id="startRecording" onclick="startRecording()" style="width: 130px;">开始录屏</button>
+                <button class="btn btn-danger" id="stopRecording" onclick="stopRecording()" style="width: 130px; display: none;">停止录屏</button>
+                <!-- <button class="btn btn-info" id="checkRecordingStatus" onclick="checkRecordingStatus()" style="width: 130px;">检查状态</button> -->
+            </div>
+
+            <div class="btn-group d-flex justify-content-between">
+                <input type="text" id="htmlUrl" class="form-control" style="width: 635px;" placeholder="输入URL地址  http://">
+                <button class="btn btn-success" id="openHTML" onclick="openHTML()">打开URL</button>
+            </div>
+
             <div class="result" id="result"></div>
+            <div id="recordingStatus" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
     </div>
         
     <div class="card mt-5 mx-auto chart-container" style="max-width: 800px;">
         <div class="card-body">
             <div class="text-center">
-                <h1 class="card-title">性能监控工具</h1>
+                <h1 class="card-title">性能监控</h1>
             </div>
 
             <div class="form-group">
@@ -113,14 +125,14 @@
                 <button class="btn btn-danger" id="stopPerformanceTest">结束性能测试</button>
             </div>
 
-            <div class="chart-container" style="position: relative; height:60vh; width:100%;">
+            <div class="chart-container" style="position: relative; height:50vh; width:100%;">
                 <canvas id="memoryChart"></canvas>
             </div>
 
-            <div class="chart-container" style="position: relative; height:60vh; width:100%;">
+            <div class="chart-container" style="position: relative; height:50vh; width:100%;">
                 <canvas id="cpuChart"></canvas>
             </div>
-            <div class="chart-container" style="position: relative; height:60vh; width:100%;">
+            <div class="chart-container" style="position: relative; height:50vh; width:100%;">
                 <canvas id="frameRateChart"></canvas>
             </div>
         </div>
@@ -312,6 +324,108 @@ function installApk() {
         });
 }
 
+let recordingFilename = null;
+// 开始录制
+function startRecording() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    fetch(`/start_recording?device=${selectedDevice}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('recordingStatus').textContent = '录制中...';
+        document.getElementById('recordingStatus').style.color = 'green';
+        document.getElementById('startRecording').style.display = 'none';
+        document.getElementById('stopRecording').style.display = 'inline-block';
+        recordingFilename = data.filename; // 保存文件名用于后续下载
+    })
+    .catch(error => {
+        document.getElementById('recordingStatus').textContent = '开始录制失败: ' + error.message;
+        document.getElementById('recordingStatus').style.color = 'red';
+        console.error('Error:', error);
+    });
+}
+
+// 停止录制并下载
+function stopRecording() {
+    const selectedDevice = document.getElementById('deviceList').value;
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    if (!recordingFilename) {
+        alert('没有正在录制的文件');
+        return;
+    }
+
+    fetch(`/stop_and_download_recording?device=${selectedDevice}&filename=${recordingFilename}`, {
+        method: 'POST'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = recordingFilename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        document.getElementById('recordingStatus').textContent = '录制已停止并下载';
+        document.getElementById('startRecording').style.display = 'inline-block';
+        document.getElementById('stopRecording').style.display = 'none';
+        recordingFilename = null;
+    })
+    .catch(error => {
+        document.getElementById('recordingStatus').textContent = '停止录制失败: ' + error.message;
+        document.getElementById('recordingStatus').style.color = 'red';
+        console.error('Error:', error);
+    });
+}
+
+// // 检查录制状态
+// function checkRecordingStatus() {
+//     const selectedDevice = document.getElementById('deviceList').value;
+//     if (!selectedDevice) {
+//         alert('请先选择设备');
+//         return;
+//     }
+
+//     fetch(`/get_recording_status?device=${selectedDevice}`)
+//     .then(response => response.json())
+//     .then(data => {
+//         if (data.status === 'recording') {
+//             document.getElementById('recordingStatus').textContent = '设备正在录制中';
+//             document.getElementById('recordingStatus').style.color = 'green';
+//             document.getElementById('startRecording').style.display = 'none';
+//             document.getElementById('stopRecording').style.display = 'inline-block';
+//         } else {
+//             document.getElementById('recordingStatus').textContent = '设备未在录制';
+//             document.getElementById('recordingStatus').style.color = 'black';
+//             document.getElementById('startRecording').style.display = 'inline-block';
+//             document.getElementById('stopRecording').style.display = 'none';
+//         }
+//     })
+//     .catch(error => {
+//         document.getElementById('recordingStatus').textContent = '检查状态失败: ' + error.message;
+//         document.getElementById('recordingStatus').style.color = 'red';
+//         console.error('Error:', error);
+//     });
+// }
+
+
 // 运行Python脚本
 function runScript() {
     const selectedDevice = document.getElementById('deviceList').value;
@@ -344,9 +458,33 @@ function runScript() {
         });
 }
 
+function openHTML() {
+    const htmlUrl = document.getElementById('htmlUrl').value;
+    const selectedDevice = document.getElementById('deviceList').value;
+    
+    if (!htmlUrl) {
+        alert('请输入URL地址');
+        return;
+    }
+    
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+    
+    const url = `/get_html_url?html_url=${(htmlUrl)}&device=${selectedDevice}`;
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('执行ADB命令失败');
+        });
+}
 
 let selectedPackageName = '';  // 设置查询包名为全局变量
-
 // 显示结果
 function displayResult(message, isSuccess, packageName) {
     const resultDiv = document.getElementById('result');
@@ -589,14 +727,14 @@ function startPerformanceTest() {
     performanceTestInterval = setInterval(function () {
         getMemoryUsage();
         getCPUUsage();
-        // getFrameRate();   屏蔽获取帧率
+        // getFrameRate();
     }, 2000); //修改获取间隔
 
     // 更新图表绘制数据
     memoryChart.update();
     cpuChart.update();
-    // frameRateChart.update(); 屏蔽更新帧率图表
-}
+    // frameRateChart.update();
+    }
 
 // 获取内存数据
 function getMemoryUsage() {
@@ -688,8 +826,15 @@ function getFrameRate() {
     }
     const currentTime = new Date();
     const formattedTime = currentTime.toLocaleTimeString();
+    // 使用全局变量 selectedPackageName 作为包名
+    const package_name = selectedPackageName; 
 
-    fetch(`/get_frame_rate?device=${selectedDevice}`)
+    if (!package_name) {
+        alert('请先选择应用包名');
+        return;
+    }
+
+    fetch(`/get_frame_rate?package=${package_name}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -699,17 +844,20 @@ function getFrameRate() {
         .then(data => {
             const frameRate = data.frame_rate || 0;
 
-            frameRateData.push({x: formattedTime, y: frameRate});
-
-            // 更新 x 轴标签
-            frameRateChart.data.labels.push(formattedTime);
-
-            frameRateChart.data.datasets[0].data = frameRateData;
-            frameRateChart.update();
+            // 更新图表数据
+            updateChartData(formattedTime, frameRate);
         })
         .catch(error => {
             console.error('Error:', error);
         });
+}
+
+// 更新图表数据
+function updateChartData(time, frameRate) {
+    frameRateData.push({ x: time, y: frameRate });
+    frameRateChart.data.labels.push(time);
+    frameRateChart.data.datasets[0].data = frameRateData;
+    frameRateChart.update();
 }
 
 function stopPerformanceTest() {
@@ -742,6 +890,7 @@ function getDevicesAndApps() {
 document.addEventListener('DOMContentLoaded', function() {
     getDevicesAndApps();
     selectedPackageName = document.getElementById('packageNameSelect').value;
+    // checkRecordingStatus(); // 检查录制状态
 });
 </script>
 </body>

@@ -3,6 +3,9 @@ __author__ = "小小的太阳"
 import os
 import socket
 import re
+import subprocess
+import time
+from datetime import datetime
 from flask import Flask, jsonify, request, send_file, render_template, send_from_directory
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -10,7 +13,7 @@ app = Flask(__name__)
 # 创建一个后台调度器
 scheduler = BackgroundScheduler()
 
-# 获取本机ip 但保存127.0.0.1，就是玩
+# 获取本机ip 但保存127.0.0.1，防止切换ip或者挂vpn后，地址乱跳
 def get_host_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -37,7 +40,7 @@ def get_devices():
 # 获取指定设备上已安装app
 def get_installed_apps():
     device = request.args.get('device')
-    adb_command = f"adb -s {device} shell pm list packages"
+    adb_command = f"adb -s {device} shell pm list package"
     result = os.popen(adb_command).read()
     apps = [line.split(':')[-1] for line in result.splitlines() if line.startswith('package:')]
     return apps
@@ -119,6 +122,18 @@ def uninstall_apk():
     return_code = os.system(command)
     if return_code == 0:
         return jsonify({'message': f'成功卸载应用：{activity_package_name}'})
+    
+# 打开html
+@app.route('/get_html_url', methods=['GET'])
+def get_html_url():
+    html_url = request.args.get('html_url')
+    device = request.args.get('device')
+    print(device)
+    print(html_url)
+    command = f"adb -s {device} shell am start -a android.intent.action.VIEW -d {html_url}"
+    return_code = os.system(command)
+    if return_code == 0:
+        return jsonify({'message': f'成功打开URL：{html_url}'})
 
 # 保存uploads目录
 @app.route('/uploads/<filename>')
@@ -144,6 +159,97 @@ def capture_screen():
     screenshot_path = f'./screenshot/photo_{device}.png'
     os.system(f"adb -s {device} exec-out screencap -p > {screenshot_path}")
     return screenshot_path
+
+# 开始录制屏幕
+@app.route('/start_recording', methods=['POST'])
+def start_recording():
+    device = request.args.get('device')
+    if not device:
+        return jsonify({'message': '请指定设备'}), 400
+    
+    # 生成带时间戳的文件名
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"screen_record_{device}_{timestamp}.mp4"
+    filepath = f"./{filename}"
+    
+    # 启动录制进程
+    try:
+        # 使用adb screenrecord命令，限制为3分钟(180秒)，分辨率720p，1280x720
+        command = f"adb -s {device} shell screenrecord --verbose --time-limit 180 --size 1280x720 /sdcard/{filename}"
+        # 在后台运行录制命令
+        subprocess.Popen(command, shell=True)
+        
+        # 返回文件名用于下载
+        return jsonify({
+            'message': '开始录制屏幕',
+            'filename': filename,
+            'status': 'recording'
+        })
+    except Exception as e:
+        return jsonify({'message': f'开始录制失败: {str(e)}'}), 500
+
+# 停止录制并下载
+@app.route('/stop_and_download_recording', methods=['POST'])
+def stop_and_download_recording():
+    device = request.args.get('device')
+    filename = request.args.get('filename')
+
+    if not device or not filename:
+        return jsonify({'message': '参数错误'}), 400
+
+    video_path = f"./uploads/{filename}"
+    try:
+        # 停止录制并拉取视频
+        os.system(f"adb -s {device} shell pkill -l SIGINT screenrecord")
+        time.sleep(1)  # 等待视频生成
+        # 将视频从设备拉取到本地
+        os.system(f"adb -s {device} pull /sdcard/{filename} ./uploads/{filename}")
+        # 删除设备上的临时文件
+        os.system(f"adb -s {device} shell rm /sdcard/{filename}")
+
+        if not os.path.exists(video_path):
+            return jsonify({'message': '录制文件未找到'}), 404
+
+        # 创建响应并发送文件
+        response = send_file(video_path, as_attachment=True)
+        return response
+    except Exception as e:
+        return jsonify({'message': f'操作失败: {e}'}), 500
+    # 无论怎样都删除临时文件夹的视频
+    finally:
+        try:
+            if os.path.exists(video_path):
+                print("删除文件")
+                os.remove(video_path)
+                app.logger.info(f"成功删除文件: {video_path}")
+        except Exception as e:
+            print("删除文件失败")
+            app.logger.error(f"删除文件 {video_path} 时出错: {e}")
+
+
+# 获取录制状态，辅助功能，暂时不需要调用
+@app.route('/get_recording_status')
+def get_recording_status():
+    device = request.args.get('device')
+    if not device:
+        return jsonify({'message': '请指定设备'}), 400
+    
+    # 检查设备上是否有screenrecord进程
+    try:
+        result = subprocess.run(
+            f"adb -s {device} shell ps | grep screenrecord",
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.stdout.strip():
+            return jsonify({'status': 'recording'})
+        else:
+            return jsonify({'status': 'stopped'})
+    except Exception as e:
+        return jsonify({'message': f'获取状态失败: {str(e)}'}), 500
+    
 
 # 运行py文件
 @app.route('/run_script', methods=['POST'])
@@ -221,33 +327,47 @@ def get_cpu_usage_for_app(device, package_name):
         return cpu_usage
     return 0
 
-# 获取指定设备的帧率
+# 获取帧率数据
 @app.route('/get_frame_rate')
 def get_frame_rate():
-    device = request.args.get('device')
-    print("-------------")
-    frame_rate = get_frame_rate_for_device(device)
+    package_name = request.args.get('package')
+    if not package_name:
+        return jsonify({'error': 'Package parameter is required'}), 400
+    
+    frame_rate = get_frame_rate_for_package(package_name)
     return jsonify({'frame_rate': frame_rate})
 
-def get_frame_rate_for_device(device):
-    adb_command = f"adb -s {device} shell dumpsys gfxinfo | grep 'Total frames rendered'"
-    output = os.popen(adb_command).read()
-    frame_count_str = re.search(r'\d+', output)
-    if frame_count_str is not None:
-        frame_count = int(frame_count_str.group())
-    else:
-        frame_count = 0
-    
-    adb_command = f"adb -s {device} shell dumpsys gfxinfo | grep 'Janky frames'"
-    output = os.popen(adb_command).read()
-    janky_frame_count_str = re.search(r'\d+', output)
-    if janky_frame_count_str is not None:
-        janky_frame_count = int(janky_frame_count_str.group())
-    else:
-        janky_frame_count = 0
+def get_frame_rate_for_package(package_name):
+    try:
+        # 执行adb命令获取帧率信息
+        adb_command = f"adb shell dumpsys gfxinfo {package_name}"
+        result = subprocess.run(adb_command, shell=True, capture_output=True, text=True)
 
-    frame_rate = (frame_count - janky_frame_count) / frame_count * 60  # 计算帧率
-    return round(frame_rate, 2)
+        # 打印输出，以便调试
+        print(result.stdout)
 
+        # 从输出中提取总帧数和掉帧数
+        output = result.stdout.strip()
+        frames_rendered_match = re.search(r'Total frames rendered: (\d+)', output)
+        janky_frames_match = re.search(r'Janky frames: (\d+)', output)
+
+        if frames_rendered_match and janky_frames_match:
+            total_frames = int(frames_rendered_match.group(1))
+            janky_frames = int(janky_frames_match.group(1))
+
+            # 计算帧率
+            if total_frames > 0:
+                frame_rate = (total_frames - janky_frames) / total_frames * 60
+            else:
+                frame_rate = 0.0
+
+            return round(frame_rate, 2)
+        else:
+            print("Failed to parse frame rate data.")
+            return 0.0
+
+    except Exception as e:
+        print(f"Error while fetching frame rate: {e}")
+        return 0.0
 if __name__ == '__main__':
     app.run(host=get_host_ip(), port=1111, debug=True, threaded=True)
