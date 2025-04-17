@@ -70,10 +70,10 @@
             </div>
             <br>
             <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
-                <button class="btn btn-primary" onclick="restartApp() "style="width: 130px;">杀端重启</button>
-                <button class="btn btn-danger" onclick="clearData() "style="width: 130px;">清除数据</button>
-                <button class="btn btn-primary" onclick="captureScreen() "style="width: 130px;">截取屏幕</button>
-                <button class="btn btn-danger" id="uninstallApp" onclick="uninstallApp() "style="width: 130px;">卸载应用</button>
+                <button class="btn btn-primary" id="restartBtn" onclick="restartApp()" style="width: 130px;">杀端重启</button>
+                <button class="btn btn-danger" id="clearDataBtn" onclick="clearData()" style="width: 130px;">清除数据</button>
+                <button class="btn btn-primary" id="captureBtn" onclick="captureScreen()" style="width: 130px;">截取屏幕</button>
+                <button class="btn btn-danger" id="uninstallAppBtn" onclick="uninstallApp()" style="width: 130px;">卸载应用</button>
             </div>
 
             <div class="btn-group d-flex justify-content-between">
@@ -87,10 +87,14 @@
             </div>
 
             <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
-                <button class="btn btn-primary" id="startRecording" onclick="startRecording()" style="width: 130px;">开始录屏</button>
+                <button class="btn btn-info" id="startRecording" onclick="startRecording()" style="width: 130px;">开始录屏</button>
                 <button class="btn btn-danger" id="stopRecording" onclick="stopRecording()" style="width: 130px; display: none;">停止录屏</button>
-                <!-- <button class="btn btn-info" id="checkRecordingStatus" onclick="checkRecordingStatus()" style="width: 130px;">检查状态</button> -->
+                <button class="btn btn-warning" id="startMonkeyTest" onclick="stopRecording()" style="width: 130px;">Monkey测试</button>
+                <button class="btn btn-info" id="exportLogcatBtn" style="width: 130px;"><i class="fas fa-download"></i> 导出日志</button>
+                <button class="btn btn-warning" id="" style="width: 130px;"><i class="fas fa-download"></i> 暂未开放</button>
             </div>
+
+            <div id="monkeyResult"></div>
 
             <div class="btn-group d-flex justify-content-between">
                 <input type="text" id="htmlUrl" class="form-control" style="width: 635px;" placeholder="输入URL地址  http://">
@@ -121,7 +125,6 @@
 
             <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
                 <button class="btn btn-primary" id="startPerformanceTest">开始性能测试</button>
-                
                 <button class="btn btn-danger" id="stopPerformanceTest">结束性能测试</button>
             </div>
 
@@ -193,10 +196,16 @@ function getDevices(callback) {
 // 重启应用
 function restartApp() {
     const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.querySelector('button[onclick="restartApp()"]');
+    
     if (!selectedDevice) {
         alert('请先选择设备');
         return;
     }
+
+    // 设置按钮加载状态
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 重启中...';
 
     fetch(`/restart_app?device=${selectedDevice}`)
         .then(response => response.json())
@@ -207,16 +216,26 @@ function restartApp() {
         .catch(error => {
             displayResult('重启应用失败，请检查连接和ADB配置', false);
             console.error('Error:', error);
+        })
+        .finally(() => {
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = '杀端重启';
         });
 }
 
 // 清除数据重启
 function clearData() {
     const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.querySelector('button[onclick="clearData()"]');
+    
     if (!selectedDevice) {
         alert('请先选择设备');
         return;
     }
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 清除中...';
 
     fetch(`/clear_data?device=${selectedDevice}`)
         .then(response => response.json())
@@ -227,6 +246,10 @@ function clearData() {
         .catch(error => {
             displayResult('清除数据失败，请检查连接和ADB配置', false);
             console.error('Error:', error);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '清除数据';
         });
 }
 
@@ -234,7 +257,8 @@ function clearData() {
 function uninstallApp() {
     const selectedDevice = document.getElementById('deviceList').value;
     const selectedPackageName = document.getElementById('packageNameSelect').value;
-
+    const btn = document.getElementById('uninstallApp');
+    
     if (!selectedDevice) {
         alert('请先选择设备');
         return;
@@ -244,35 +268,43 @@ function uninstallApp() {
         alert('请先选择应用包名');
         return;
     }
+    // 弹出是否确认卸载弹窗
+    if (!confirm('确认要卸载应用吗？')) return;
 
-    // 弹出确认框
-    if (confirm('确认要卸载应用吗？')) {
-        // 用户点击了确认
-        fetch(`/uninstall_apk?device=${selectedDevice}`, {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 卸载中...';
+
+    fetch(`/uninstall_apk?device=${selectedDevice}`, {
             method: 'POST',
         })
-            .then(response => response.json())
-            .then(data => {
-                displayResult(data.message, true);
-                getInstalledApps();  // 刷新应用列表
-            })
-            .catch(error => {
-                displayResult('卸载应用失败，请检查连接和ADB配置', false);
-                console.error('Error:', error);
-            });
-    } else {
-        // 用户点击了取消
-        return;
-    }
+        .then(response => response.json())
+        .then(data => {
+            displayResult(data.message, true);
+            getInstalledApps();  // 卸载后刷新应用列表
+        })
+        .catch(error => {
+            displayResult('卸载应用失败，请检查连接和ADB配置', false);
+            console.error('Error:', error);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '卸载应用';
+        });
 }
 
 // 截取手机屏幕
 function captureScreen() {
     const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.querySelector('button[onclick="captureScreen()"]');
+    
     if (!selectedDevice) {
         alert('请先选择设备');
         return;
     }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 截屏中...';
+
     fetch(`/capture_screen?device=${selectedDevice}`)
         .then(response => {
             if (!response.ok) {
@@ -289,6 +321,10 @@ function captureScreen() {
         .catch(error => {
             displayResult('截取设备屏幕失败，请检查连接和ADB配置', false);
             console.error('Error:', error);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '截取屏幕';
         });
 }
 
@@ -358,6 +394,7 @@ function stopRecording() {
         alert('请先选择设备');
         return;
     }
+    
 
     if (!recordingFilename) {
         alert('没有正在录制的文件');
@@ -369,7 +406,7 @@ function stopRecording() {
     })
     .then(response => {
         if (!response.ok) {
-            throw new Error('Network response was not ok');
+            throw new Error('未知错误，刷新网页再试');
         }
         return response.blob();
     })
@@ -382,7 +419,9 @@ function stopRecording() {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+        // 添加toast提示
+        showToast('录屏文件下载成功', 'success');
+
         document.getElementById('recordingStatus').textContent = '录制已停止并下载';
         document.getElementById('startRecording').style.display = 'inline-block';
         document.getElementById('stopRecording').style.display = 'none';
@@ -425,6 +464,129 @@ function stopRecording() {
 //     });
 // }
 
+// 开始Monkey测试
+document.getElementById('startMonkeyTest').addEventListener('click', function() {
+    const device = document.getElementById('deviceList').value;
+    if (!device) {
+        alert('请先选择设备');
+        return;
+    }
+
+    // 短暂禁用按钮防止重复运行
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 运行中...';
+
+    fetch(`/start_monkey_test?device=${encodeURIComponent(device)}`, {
+        method: 'POST'
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'error') {
+            throw new Error(data.message);
+        }
+        
+        // 显示测试信息
+        document.getElementById('monkeyResult').innerHTML = 
+            `<div class="alert alert-success mt-3">
+                <h5><i class="fas fa-check-circle"></i> Monkey测试正在运行中...无法停止！</h5>
+                <hr>
+                <p><strong>被测包名：</strong>${data.package_name}</p>
+                <p><strong>执行事件：</strong>${data.event_count}次</p>
+                <p><strong>事件间隔：</strong>${data.throttle}ms</p>
+                <p><strong>点击占比：</strong>${data.pct_touch}%</p>
+                <p><strong>滑动占比：</strong>${data.pct_motion}%</p>
+            </div>`;
+    })
+    .catch(error => {
+        console.error('Monkey测试失败:', error);
+        document.getElementById('monkeyResult').innerHTML = 
+            `<div class="alert alert-danger mt-3">
+                <h5><i class="fas fa-exclamation-circle"></i> 测试启动失败</h5>
+                <p>${error.message || '未知错误'}</p>
+            </div>`;
+    })
+    .finally(() => {
+        // 10秒后恢复按钮状态
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = 'Monkey测试';
+        }, 10000);
+    });
+});
+
+// 导出logcat日志
+document.getElementById('exportLogcatBtn').addEventListener('click', function() {
+    const device = document.getElementById('deviceList').value;
+    if (!device) {
+        alert('请先选择设备');
+        return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导出中...';
+
+    fetch(`/export_logcat?device=${encodeURIComponent(device)}`)
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'error') {
+            throw new Error(data.message);
+        }
+        
+        // 自动下载
+        const downloadLink = document.createElement('a');
+        downloadLink.href = `/download_logcat?log_file=${encodeURIComponent(data.log_file)}`;
+        downloadLink.download = `logcat_${device}_${new Date().toISOString().slice(0,10)}.log`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        
+        // 显示消息
+        showToast('日志导出成功', 'success');
+    })
+    .catch(error => {
+        console.error('日志导出失败:', error);
+        showToast(`导出失败: ${error.message}`, 'danger');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-download"></i> 导出日志';
+    });
+});
+
+// Toast通知样式
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast show align-items-center text-white bg-${type} border-0`;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '9999';
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>`;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
 
 // 运行Python脚本
 function runScript() {

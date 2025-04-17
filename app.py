@@ -95,7 +95,7 @@ def install_apk():
     uploaded_file = request.files['file']
 
     if uploaded_file.filename != '':
-        # 临时将上传的文件命名为 test.py 防止乱七八糟的名字
+        # 临时将上传的文件重命名为 test.py 防止乱七八糟的名字
         apk_path = f'./uploads/test.apk'
         uploaded_file.save(apk_path)
 
@@ -157,6 +157,7 @@ def get_current_package(device):
 def capture_screen():
     device = request.args.get('device')
     screenshot_path = f'./screenshot/photo_{device}.png'
+    # 截图的adb命令
     os.system(f"adb -s {device} exec-out screencap -p > {screenshot_path}")
     return screenshot_path
 
@@ -170,11 +171,10 @@ def start_recording():
     # 生成带时间戳的文件名
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"screen_record_{device}_{timestamp}.mp4"
-    filepath = f"./{filename}"
     
     # 启动录制进程
     try:
-        # 使用adb screenrecord命令，限制为3分钟(180秒)，分辨率720p，1280x720
+        # 使用adb screenrecord命令，限制为180秒，分辨率720p，1280x720
         command = f"adb -s {device} shell screenrecord --verbose --time-limit 180 --size 1280x720 /sdcard/{filename}"
         # 在后台运行录制命令
         subprocess.Popen(command, shell=True)
@@ -250,6 +250,105 @@ def get_recording_status():
     except Exception as e:
         return jsonify({'message': f'获取状态失败: {str(e)}'}), 500
     
+
+# 开始monkey测试
+@app.route('/start_monkey_test', methods=['POST'])
+def start_monkey_test():
+    device = request.args.get('device')
+    
+    if not device:
+        return jsonify({
+            'status': 'error',
+            'message': '设备参数不能为空'
+        }), 400
+    
+    # 获取当前屏幕上包名
+    package_name = get_current_package(device)
+    if not package_name:
+        return jsonify({
+            'status': 'error',
+            'message': '无法获取当前应用包名'
+        }), 400
+    
+    # 设置Monkey测试参数
+    event_count = 1000  # 执行事件的数量
+    throttle = 300   # 事件间隔300ms
+    pct_touch = 80  # 点击事件比例
+    pct_motion = 20 # 滑动事件比例
+    
+    try:
+        
+        # 启动Monkey测试
+        command = f"adb -s {device} shell monkey -p {package_name} --throttle {throttle} --pct-touch {pct_touch} --pct-motion {pct_motion} {event_count}"
+        subprocess.Popen(command, shell=True)
+        
+        # 保存启动参数用于展示信息
+        return jsonify({
+            'status': 'success',
+            'message': 'Monkey测试已启动',
+            'package_name': package_name,
+            'event_count': event_count,
+            'throttle': throttle,
+            'pct_touch':pct_touch,
+            'pct_motion':pct_motion,
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'启动Monkey测试失败: {str(e)}'
+        }), 500
+
+
+# 停止测试，暂时不知道如何停止
+
+
+# adb logcat功能
+@app.route('/export_logcat', methods=['GET'])
+def export_logcat():
+    device = request.args.get('device')
+    if not device:
+        return jsonify({'status': 'error', 'message': '需要设备参数'}), 400
+
+    try:
+        # 生成带时间戳的日志文件，并保存为txt格式
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = f"./uploads/logcat_{device}_{timestamp}.txt"
+        
+        # 导出日志命令
+        os.system(f"adb -s {device} logcat -d > {log_file}")
+        
+        if not os.path.exists(log_file):
+            return jsonify({'status': 'error', 'message': '日志生成失败'}), 500
+            
+        return jsonify({
+            'status': 'success',
+            'log_file': log_file,
+            'message': '日志已生成'
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'导出失败: {str(e)}'}), 500
+
+# 下载并删除临时文件
+@app.route('/download_logcat', methods=['GET'])
+def download_logcat():
+    log_file = request.args.get('log_file')
+    if not log_file or not os.path.exists(log_file):
+        return jsonify({'status': 'error', 'message': '文件不存在'}), 404
+    
+    try:
+        response = send_file(log_file, as_attachment=True)
+        return response
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'下载失败: {str(e)}'}), 500
+    # 无论怎样都删除临时log文件
+    finally:
+        try:
+            if os.path.exists(log_file):
+                os.remove(log_file)
+                app.logger.info(f"已删除临时日志: {log_file}")
+        except Exception as e:
+            app.logger.error(f"删除文件失败: {str(e)}")
 
 # 运行py文件
 @app.route('/run_script', methods=['POST'])
