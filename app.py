@@ -226,13 +226,13 @@ def stop_and_download_recording():
             print("删除文件失败")
             app.logger.error(f"删除文件 {video_path} 时出错: {e}")
 
-
 # 获取录制状态，辅助功能，暂时不需要调用
 @app.route('/get_recording_status')
 def get_recording_status():
     device = request.args.get('device')
     if not device:
         return jsonify({'message': '请指定设备'}), 400
+    
     
     # 检查设备上是否有screenrecord进程
     try:
@@ -370,27 +370,70 @@ def download_logcat():
         except Exception as e:
             app.logger.error(f"删除文件失败: {str(e)}")
 
-# 运行py文件
-@app.route('/run_script', methods=['POST'])
-def run_script():
+# 存储原始分辨率
+original_resolution = None
+# 预设分辨率列表
+preset_resolutions = [
+    "1080×2340", "1080×2248", "1080×2220", "1080×2160", "1080×2040",
+    "1080×1920", "1080×1812", "720×1520", "720×1480", "800×1280",
+    "720×1280", "640×1136", "768×1024", "640×960", "540×960",
+    "480×854", "480×800", "480×640", "320×480", "240×320"
+]
+
+# 获取当前分辨率
+def get_current_resolution(device):
+    command = f"adb -s {device} shell wm size"
+    result = os.popen(command).read()
+    match = re.search(r'Physical size: (\d+)x(\d+)', result)
+    if match:
+        width = match.group(1)
+        height = match.group(2)
+        return width, height
+    return None, None
+
+# 更改分辨率
+@app.route('/change_resolution', methods=['POST'])
+def change_resolution():
+    global original_resolution
     device = request.args.get('device')
-    uploaded_file = request.files['file']
+    new_resolution = request.json.get('resolution')
+    new_width, new_height = new_resolution.split('×')
 
-    if not uploaded_file or not uploaded_file.filename.endswith('.py'):
-        return jsonify({'message': '请选择一个Python脚本文件'})
+    if device and new_width and new_height:
+        try:
+            # 获取原始分辨率
+            original_resolution = get_current_resolution(device)
+            # 更改分辨率
+            os.system(f"adb -s {device} shell wm size {new_width}x{new_height}")
+            return jsonify({'status': 'success', 'message': '分辨率已更改'})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    return jsonify({'status': 'error', 'message': 'Missing device or resolution'}), 400
 
-    # 临时将上传的文件命名为 test.py 防止乱七八糟的名字
-    script_path = f'./uploads/test.py'
-    uploaded_file.save(script_path)
+# 还原分辨率
+@app.route('/restore_resolution', methods=['POST'])
+def restore_resolution():
+    global original_resolution
+    device = request.args.get('device')
 
-    try:
-        os.system(f'python3 {script_path}')
-        output = '脚本执行成功'
-    except Exception as e:
-        output = f'脚本执行失败: {e}'
-    finally:
-        os.remove(script_path)  # 无论是否发生异常，都会执行删除
-    return jsonify({'message': output})
+    if device and original_resolution:
+        width, height = original_resolution
+        try:
+            # 还原分辨率
+            os.system(f"adb -s {device} shell wm size {width}x{height}")
+            return jsonify({'status': 'success', 'message': '分辨率已还原'})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    return jsonify({'status': 'error', 'message': 'Missing device or original resolution'}), 400
+
+# 获取设备列表及预设分辨率
+@app.route('/get_devices_and_resolutions')
+def get_devices_and_resolutions():
+    adb_command = "adb devices"
+    result = os.popen(adb_command).read()
+    devices = [line.split('\t')[0] for line in result.splitlines()[1:] if line.endswith('\tdevice')]
+    return jsonify({'devices': devices, 'resolutions': preset_resolutions})
+
 
 # 导出JS日志
 @app.route('/export_js_logs_device')

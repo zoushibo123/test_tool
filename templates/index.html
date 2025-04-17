@@ -78,27 +78,33 @@
 
             <div class="btn-group d-flex justify-content-between">
                 <input type="file" name="file" id="apkFile" accept=".apk" class="form-control-file">
-                <button class="btn btn-success" id="installApk" onclick="installApk()">安装APK</button>
+                <button class="btn btn-success" id="installApkBtn" onclick="installApk()">安装APK</button>
             </div>
 
             <div class="btn-group d-flex justify-content-between">
                 <input type="file" name="file" id="pyFile" accept=".py" class="form-control-file">
-                <button class="btn btn-success" id="runScript" onclick="runScript()">运行Py文件</button>
+                <button class="btn btn-success" id="runScriptBtn" onclick="runScript()">运行Py文件</button>
             </div>
 
             <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
                 <button class="btn btn-info" id="startRecordingBtn" onclick="startRecording()" style="width: 130px;">开始录屏</button>
                 <button class="btn btn-danger" id="stopRecordingBtn" onclick="stopRecording()" style="width: 130px; display: none;">停止录屏</button>
                 <button class="btn btn-warning" id="startMonkeyTestBtn" onclick="startMonkeyTest()" style="width: 130px;">Monkey测试</button>
-                <button class="btn btn-info" id="exportLogcatBtn" style="width: 130px;"><i class="fas fa-download"></i> 导出日志</button>
+                <button class="btn btn-info" id="exportLogcatBtn" onclick="exportLogcat()" style="width: 130px;">导出日志</button>
                 <button class="btn btn-warning" id="" style="width: 130px;"><i class="fas fa-download"></i> 暂未开放</button>
             </div>
 
             <div id="monkeyResult"></div>
 
             <div class="btn-group d-flex justify-content-between">
-                <input type="text" id="htmlUrl" class="form-control" style="width: 635px;" placeholder="输入URL地址  http://">
-                <button class="btn btn-success" id="openHTML" onclick="openHTML()">打开URL</button>
+                <select id="resolutionSelect" class="form-control" style="width: 635px;">
+                </select>
+                <button class="btn btn-warning" id="resolutionBtn" onclick="changeOrRestoreResolution()">更改分辨率</button>
+            </div>
+
+            <div class="btn-group d-flex justify-content-between">
+                <input type="text" id="openUrl" class="form-control" style="width: 635px;" placeholder="输入URL地址  http://">
+                <button class="btn btn-success" id="openUrl" onclick="openUrl()">打开URL</button>
             </div>
 
             <div class="result" id="result"></div>
@@ -331,6 +337,7 @@ function captureScreen() {
 // 安装APK
 function installApk() {
     const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.querySelector('button[onclick="installApk()"]');
     if (!selectedDevice) {
         alert('请先选择设备');
         return;
@@ -341,6 +348,9 @@ function installApk() {
         alert('请先选择要安装的APK文件');
         return;
     }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 安装中...';
 
     const formData = new FormData();
     formData.append('file', apkFile);
@@ -357,6 +367,11 @@ function installApk() {
         .catch(error => {
             displayResult('安装APK失败，请检查连接和ADB配置', false);
             console.error('Error:', error);
+        })
+        .finally(() => {
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = '安装APK';
         });
 }
 
@@ -590,10 +605,14 @@ function showToast(message, type = 'info') {
 // 运行Python脚本
 function runScript() {
     const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.querySelector('button[onclick="runScript()"]');
     if (!selectedDevice) {
         alert('请先选择设备');
         return;
     }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 运行中...';
 
     const pyFile = document.getElementById('pyFile').files[0];
     if (!pyFile) {
@@ -616,12 +635,101 @@ function runScript() {
         .catch(error => {
             displayResult('运行Python脚本失败，请检查连接和ADB配置', false);
             console.error('Error:', error);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '运行Py文件';
         });
 }
 
-function openHTML() {
-    const htmlUrl = document.getElementById('htmlUrl').value;
+let isChanged = false;
+let resolutions = [];
+// 页面加载完成后获取设备列表和预设分辨率
+window.onload = function () {
+    fetch('/get_devices_and_resolutions')
+        .then(response => response.json())
+        .then(data => {
+            resolutions = data.resolutions;
+            const select = document.getElementById('resolutionSelect');
+            resolutions.forEach(resolution => {
+                const option = document.createElement('option');
+                option.value = resolution;
+                option.textContent = resolution;
+                select.appendChild(option);
+            });
+        });
+};
+
+// 更改和还原分辨率
+function changeOrRestoreResolution() {
     const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.getElementById('resolutionBtn');
+    const selectedResolution = document.getElementById('resolutionSelect').value;
+
+    if (!selectedDevice) {
+        alert('请先选择设备');
+        return;
+    }
+
+    if (!isChanged) {
+        if (!selectedResolution) {
+            alert('请选择一个分辨率');
+            return;
+        }
+
+        // 更改分辨率
+        fetch(`/change_resolution?device=${selectedDevice}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ resolution: selectedResolution })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('分辨率已更改', 'success');
+                    btn.textContent = '还原分辨率';
+                    btn.classList.remove('btn-warning');
+                    btn.classList.add('btn-success');
+                    isChanged = true;
+                } else {
+                    showToast(`分辨率更改失败: ${data.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                showToast(`分辨率更改失败: ${error.message}`, 'danger');
+                console.error('Error:', error);
+            });
+    } else {
+        // 还原分辨率
+        fetch(`/restore_resolution?device=${selectedDevice}`, {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('分辨率已还原', 'success');
+                    btn.textContent = '更改分辨率';
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-warning');
+                    isChanged = false;
+                } else {
+                    showToast(`分辨率还原失败: ${data.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                showToast(`分辨率还原失败: ${error.message}`, 'danger');
+                console.error('Error:', error);
+            });
+    }
+}
+
+// 打开URL链接
+function openUrl() {
+    const htmlUrl = document.getElementById('openUrl').value;
+    const selectedDevice = document.getElementById('deviceList').value;
+    const btn = document.querySelector('button[onclick="openUrl()"]');
     
     if (!htmlUrl) {
         alert('请输入URL地址');
@@ -633,15 +741,23 @@ function openHTML() {
         return;
     }
     
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 打开中...';
+
     const url = `/get_html_url?html_url=${(htmlUrl)}&device=${selectedDevice}`;
     fetch(url)
         .then(response => response.json())
         .then(data => {
-            alert(data.message);
+            displayResult(data.message, true);
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('执行ADB命令失败');
+            displayResult('打开url失败，请检查后重试', false);
+        })
+        .finally(() => {
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = '打开URL';
         });
 }
 
