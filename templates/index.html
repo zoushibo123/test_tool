@@ -87,9 +87,9 @@
             </div>
 
             <div class="input-group-append d-flex justify-content-between mb-3 custom-btn-group btn-group-row">
-                <button class="btn btn-info" id="startRecording" onclick="startRecording()" style="width: 130px;">开始录屏</button>
-                <button class="btn btn-danger" id="stopRecording" onclick="stopRecording()" style="width: 130px; display: none;">停止录屏</button>
-                <button class="btn btn-warning" id="startMonkeyTest" onclick="stopRecording()" style="width: 130px;">Monkey测试</button>
+                <button class="btn btn-info" id="startRecordingBtn" onclick="startRecording()" style="width: 130px;">开始录屏</button>
+                <button class="btn btn-danger" id="stopRecordingBtn" onclick="stopRecording()" style="width: 130px; display: none;">停止录屏</button>
+                <button class="btn btn-warning" id="startMonkeyTestBtn" onclick="startMonkeyTest()" style="width: 130px;">Monkey测试</button>
                 <button class="btn btn-info" id="exportLogcatBtn" style="width: 130px;"><i class="fas fa-download"></i> 导出日志</button>
                 <button class="btn btn-warning" id="" style="width: 130px;"><i class="fas fa-download"></i> 暂未开放</button>
             </div>
@@ -376,8 +376,8 @@ function startRecording() {
     .then(data => {
         document.getElementById('recordingStatus').textContent = '录制中...';
         document.getElementById('recordingStatus').style.color = 'green';
-        document.getElementById('startRecording').style.display = 'none';
-        document.getElementById('stopRecording').style.display = 'inline-block';
+        document.getElementById('startRecordingBtn').style.display = 'none';
+        document.getElementById('stopRecordingBtn').style.display = 'inline-block';
         recordingFilename = data.filename; // 保存文件名用于后续下载
     })
     .catch(error => {
@@ -394,7 +394,6 @@ function stopRecording() {
         alert('请先选择设备');
         return;
     }
-    
 
     if (!recordingFilename) {
         alert('没有正在录制的文件');
@@ -423,8 +422,8 @@ function stopRecording() {
         showToast('录屏文件下载成功', 'success');
 
         document.getElementById('recordingStatus').textContent = '录制已停止并下载';
-        document.getElementById('startRecording').style.display = 'inline-block';
-        document.getElementById('stopRecording').style.display = 'none';
+        document.getElementById('startRecordingBtn').style.display = 'inline-block';
+        document.getElementById('stopRecordingBtn').style.display = 'none';
         recordingFilename = null;
     })
     .catch(error => {
@@ -465,7 +464,7 @@ function stopRecording() {
 // }
 
 // 开始Monkey测试
-document.getElementById('startMonkeyTest').addEventListener('click', function() {
+document.getElementById('startMonkeyTestBtn').addEventListener('click', function() {
     const device = document.getElementById('deviceList').value;
     if (!device) {
         alert('请先选择设备');

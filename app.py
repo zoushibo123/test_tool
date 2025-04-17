@@ -271,15 +271,35 @@ def start_monkey_test():
         }), 400
     
     # 设置Monkey测试参数
-    event_count = 1000  # 执行事件的数量
+    event_count = 10000  # 执行事件的数量
     throttle = 300   # 事件间隔300ms
     pct_touch = 80  # 点击事件比例
     pct_motion = 20 # 滑动事件比例
+
+    # 确保其他事件类型比例为 0
+    pct_trackball = 0
+    pct_nav = 0
+    pct_syskeys = 0
+    pct_appswitch = 0
+    pct_flip = 0
+    pct_anyevent = 0
     
     try:
         
         # 启动Monkey测试
-        command = f"adb -s {device} shell monkey -p {package_name} --throttle {throttle} --pct-touch {pct_touch} --pct-motion {pct_motion} {event_count}"
+        command = (
+            f"adb -s {device} shell monkey -p {package_name} "
+            f"--throttle {throttle} "
+            f"--pct-touch {pct_touch} "
+            f"--pct-motion {pct_motion} "
+            f"--pct-trackball {pct_trackball} "
+            f"--pct-nav {pct_nav} "
+            f"--pct-syskeys {pct_syskeys} "
+            f"--pct-appswitch {pct_appswitch} "
+            f"--pct-flip {pct_flip} "
+            f"--pct-anyevent {pct_anyevent} "
+            f"{event_count}"
+    )
         subprocess.Popen(command, shell=True)
         
         # 保存启动参数用于展示信息
