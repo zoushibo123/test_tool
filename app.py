@@ -370,15 +370,52 @@ def download_logcat():
         except Exception as e:
             app.logger.error(f"删除文件失败: {str(e)}")
 
+# 快速输入文本
+@app.route('/send_text', methods=['POST'])
+def send_text():
+    device = request.args.get('device')
+    text = request.json.get('text')
+    if device and text:
+        try:
+            os.system(f'adb -s {device} shell input text "{text}"')
+            return jsonify({'status': 'success'})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    return jsonify({'status': 'error', 'message': 'Missing device or text'}), 400
+
+# 运行py文件
+@app.route('/run_script', methods=['POST'])
+def run_script():
+    device = request.args.get('device')
+    uploaded_file = request.files['file']
+
+    if not uploaded_file or not uploaded_file.filename.endswith('.py'):
+        return jsonify({'message': '请选择一个Python脚本文件'})
+
+    # 临时将上传的文件命名为 test.py 防止乱七八糟的名字
+    script_path = f'./uploads/test.py'
+    uploaded_file.save(script_path)
+
+    try:
+        os.system(f'python3 {script_path}')
+        output = '脚本执行成功'
+    except Exception as e:
+        output = f'脚本执行失败: {e}'
+    finally:
+        os.remove(script_path)  # 无论是否发生异常，都会执行删除
+    return jsonify({'message': output})
+
 # 存储原始分辨率
 original_resolution = None
 # 预设分辨率列表
 preset_resolutions = [
-    "1080×2340", "1080×2248", "1080×2220", "1080×2160", "1080×2040",
-    "1080×1920", "1080×1812", "720×1520", "720×1480", "800×1280",
-    "720×1280", "640×1136", "768×1024", "640×960", "540×960",
-    "480×854", "480×800", "480×640", "320×480", "240×320"
-]
+    "1080×2400", "1080×2412", "1440×3040", "1440×3088",
+    "1440×3200", "1212×2616", "1440×3216", "1800×2880",
+    "2160×3840", "1440×2560", "1080×2340", "1080×2248",
+    "1080×2220", "1080×2160", "1080×2040", "1080×1920",
+    "1080×1812", "720×1520", "720×1480", "800×1280",
+    "720×1280", "640×1136", "768×1024"
+    ]
 
 # 获取当前分辨率
 def get_current_resolution(device):
